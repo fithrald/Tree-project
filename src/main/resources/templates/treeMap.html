@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Mark a Tree on the Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 75vh;
+            width: 100%;
+        }
+        #message {
+            margin: 10px;
+            padding: 10px;
+            background-color: #f8d7da;
+            color: #721c24;
+            display: none;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+        }
+        #price-list {
+            margin: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #total-cost {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        #tree-selection {
+            margin: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .tree-type {
+            margin-bottom: 10px;
+        }
+        #tree-type-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+        }
+
+        #modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            width: 300px;
+            border-radius: 5px;
+            text-align: center;
+            z-index: 10000;
+        }
+    </style>
+</head>
+<body>
+<h3>Click on the map to mark a tree location</h3>
+<div id="message">You cannot plant a tree outside the designated area!</div>
+
+<div id="price-list">
+    <h4>Selected Trees, Regions, Types and Prices:</h4>
+    <ul id="selected-trees"></ul>
+    <div id="total-cost">Total cost: $0</div>
+    <p id="discount">Your Amazon discount code for 5% off the total: $0</p>
+</div>
+
+<div id="map"></div>
+
+<form th:action="@{/tree/payment}" th:method="post" onsubmit="return prepareMarkersData()">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+
+    <input type="hidden" name="markersData" id="markersData" />
+
+    <input type="submit" value="Proceed to Payment" />
+</form>
+
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+<script th:inline="javascript">
+    let map;
+    let markers = [];
+    let allowedPolygons = [];
+    let totalCost = 0;
+
+    let tempLocation = null;
+    let tempPrice = 0;
+    let tempRegion = "";
+    let tempTreeTypes = [];
+
+    const treeIcon = L.icon({
+        iconUrl: 'https://static.vecteezy.com/system/resources/thumbnails/003/988/716/small_2x/tree-icon-illustration-free-vector.jpg',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+    });
+
+    const predefinedTrees = [[${userTrees}]];
+
+    const regionData = {
+        "green": {
+            price: 10,
+            region: "South America",
+            treeTypes: [
+                { type: "Amazon Tree", price: 10 },
+                { type: "Cocoa Tree", price: 12 },
+                { type: "Hevea", price: 15 }
+            ]
+        },
+        "blue": {
+            price: 15,
+            region: "Western Ukraine",
+            treeTypes: [
+                { type: "Oak", price: 15 },
+                { type: "Birch", price: 17 },
+                { type: "Pine", price: 20 }
+            ]
+        },
+        "yellow": {
+            price: 20,
+            region: "Central Africa",
+            treeTypes: [
+                { type: "Date Palm", price: 20 },
+                { type: "Acacia", price: 22 },
+                { type: "Baobab", price: 25 }
+            ]
+        }
+    };
+
+    function initMap() {
+        map = L.map('map').setView([40.7128, -74.0060], 3);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        addAllowedZone([
+            [-20.0, -50.0],
+            [-30.0, -55.0],
+            [-20.0, -45.0]
+        ], 'green', regionData.green.price, regionData.green.region, regionData.green.treeTypes);
+
+        addAllowedZone([
+            [49.8397, 23.9948],
+            [49.5, 24.1],
+            [49.3, 23.6],
+            [50.0, 23.7]
+        ], 'blue', regionData.blue.price, regionData.blue.region, regionData.blue.treeTypes);
+
+        addAllowedZone([
+            [2.5, 13.0],
+            [0.5, 20.0],
+            [-2.5, 23.0],
+            [1.5, 28.0]
+        ], 'yellow', regionData.yellow.price, regionData.yellow.region, regionData.yellow.treeTypes);
+
+        predefinedTrees.forEach(function(tree) {
+            addTreeMarker(L.latLng(tree.lat, tree.lng), false, 0, "", tree.treeType || "", tree.treeName || "");
+        });
+
+        map.on('click', function(e) {
+            let zoneData = getZoneData(e.latlng);
+            if (zoneData !== null) {
+                tempLocation = e.latlng;
+                tempPrice = zoneData.price;
+                tempRegion = zoneData.region;
+                tempTreeTypes = zoneData.treeTypes;
+
+                showTreeTypeModal();
+                document.getElementById('message').style.display = 'none';
+            } else {
+                showMessage();
+            }
+        });
+    }
+
+    function addAllowedZone(polygonCoordinates, color, price, region, treeTypes) {
+        const polygon = L.polygon(polygonCoordinates, {
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.5
+        }).addTo(map);
+
+        let geoJsonPolygon = polygonCoordinates.map(coord => [coord[1], coord[0]]);
+        geoJsonPolygon.push(geoJsonPolygon[0]);
+
+        allowedPolygons.push({
+            polygon: turf.polygon([geoJsonPolygon]),
+            price: price,
+            region: region,
+            treeTypes: treeTypes
+        });
+    }
+
+    function getZoneData(latlng) {
+        const point = turf.point([latlng.lng, latlng.lat]);
+        let matchedZone = allowedPolygons.find(zone => turf.booleanPointInPolygon(point, zone.polygon));
+        return matchedZone ? matchedZone : null;
+    }
+
+    function showTreeTypeModal() {
+        const select = document.getElementById('tree-type-select');
+        select.innerHTML = '';
+        tempTreeTypes.forEach(function(treeData) {
+            const option = document.createElement('option');
+            option.value = treeData.type;
+            option.text = `${treeData.type} - $${treeData.price}`;
+            option.setAttribute('data-price', treeData.price);
+            select.appendChild(option);
+        });
+        document.getElementById('modal-region').textContent = `Region: ${tempRegion}`;
+        document.getElementById('tree-type-modal').style.display = 'block';
+    }
+
+    function confirmTreeType() {
+        const select = document.getElementById('tree-type-select');
+        const selectedTreeType = select.options[select.selectedIndex].value;
+        const selectedTreePrice = parseFloat(select.options[select.selectedIndex].getAttribute('data-price'));
+
+        const treeNameInput = document.getElementById('tree-name-input');
+        const treeName = treeNameInput.value;
+
+        addTreeMarker(tempLocation, true, selectedTreePrice, tempRegion, selectedTreeType, treeName);
+
+        document.getElementById('tree-type-modal').style.display = 'none';
+        tempLocation = null;
+        tempPrice = 0;
+        tempRegion = "";
+        tempTreeTypes = [];
+    }
+
+    function cancelTreeType() {
+        document.getElementById('tree-type-modal').style.display = 'none';
+        tempLocation = null;
+        tempPrice = 0;
+        tempRegion = "";
+        tempTreeTypes = [];
+    }
+
+    function addTreeMarker(location, isNew, price = 0, region = "", treeType = "", treeName = "") {
+        const marker = L.marker([location.lat, location.lng], { icon: treeIcon }).addTo(map);
+        marker.bindPopup(`<span>Tree Name:</span> ${treeName}</br><span>Tree Type:</span> ${treeType}`);
+
+        if (isNew) {
+            markers.push({
+                lat: location.lat,
+                lng: location.lng,
+                price: price,
+                region: region,
+                treeType: treeType,
+                treeName: treeName
+            });
+            totalCost += price;
+            updatePriceList(location, price, region, treeType, treeName);
+            updateTotalCost();
+        }
+    }
+
+    function updatePriceList(location, price, region, treeType, treeName) {
+        const ul = document.getElementById("selected-trees");
+        const treeNumber = ul.children.length + 1;
+        const li = document.createElement("li");
+        li.innerHTML = `
+         Tree №<strong>${treeNumber}</strong>:
+        Name: <strong>${treeName}</strong>,
+        Type: <strong>${treeType}</strong>,
+        Region: <strong>${region}</strong>,
+        Coordinates: (<strong>${location.lat.toFixed(5)}</strong>, <strong>${location.lng.toFixed(5)}</strong>),
+        Price: <strong>$${price}</strong>
+    `;
+        ul.appendChild(li);
+    }
+
+    function updateTotalCost() {
+        document.getElementById("total-cost").textContent = `Total cost: $${totalCost}`;
+        document.getElementById("discount").textContent = `Your Amazon discount code for 5% off the total: $${(totalCost * 0.05).toFixed(2)}`;
+    }
+
+    function showMessage() {
+        const messageDiv = document.getElementById('message');
+        messageDiv.style.display = 'block';
+        setTimeout(() => {
+            messageDiv.style.display = 'none';
+        }, 3000);
+    }
+
+    function prepareMarkersData() {
+        document.getElementById('markersData').value = JSON.stringify(markers);
+        return true;
+    }
+
+    document.addEventListener("DOMContentLoaded", initMap);
+</script>
+
+</body>
+<div id="tree-type-modal" style="display: none;">
+    <div id="modal-content">
+        <h3>Select Tree Type</h3>
+        <p id="modal-region"></p>
+        <select id="tree-type-select"></select>
+        <br><br>
+        <label for="tree-name-input">Enter tree name:</label>
+        <input type="text" id="tree-name-input" placeholder="Tree name" />
+        <br><br>
+        <button onclick="confirmTreeType()">Confirm</button>
+        <button onclick="cancelTreeType()">Cancel</button>
+    </div>
+</div>
+
+</html>
