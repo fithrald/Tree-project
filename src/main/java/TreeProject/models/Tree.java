@@ -6,30 +6,28 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.List;
-
 @AllArgsConstructor
 @NoArgsConstructor
 @Setter
 @Getter
 @Entity
 @Table
-public class Person {
+public class Tree {
     @Id
     @Column(name = "id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Column(name = "username")
-    private String username;
+    @Column(name = "lat")
+    private String lat;
 
-    @Column(name = "year_of_birth")
-    private int yearOfBirth;
-
-    @Column(name = "password")
-    private String password;
-
-    @OneToMany(mappedBy = "person")
-    private List<Tree> trees;
-
+    @Column(name = "lng")
+    private String lng;
+    @Column(name = "treetype")
+    private String treeType;
+    @Column(name = "treename")
+    private String treeName;
+    @ManyToOne
+    @JoinColumn(name = "person_id")
+    private Person person;
 }
