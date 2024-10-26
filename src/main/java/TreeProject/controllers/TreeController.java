@@ -17,8 +17,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 
@@ -62,7 +64,35 @@ public class TreeController {
         model.addAttribute("discount", discount);
         return "payment";
     }
+    @PostMapping("/save")
+    public String payAndSaveMarkers(@AuthenticationPrincipal PersonDetails personDetails,
+                                    @RequestParam("totalCost") String totalCost,
+                                    @RequestParam("markersData") String markersData,
+                                    Model model) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        List<TreeDTO> treeDTOS = new ArrayList<>();
+        try {
+            treeDTOS = objectMapper.readValue(markersData, new TypeReference<List<TreeDTO>>() {});
 
+            List<Tree> trees = treeDTOS.stream()
+                    .map(treeDTO -> convertToEntity(treeDTO, personDetails.getPerson()))
+                    .collect(Collectors.toList());
+            treeRepository.saveAll(trees);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+        double totalCostValue = Double.parseDouble(totalCost);
+        double discount = totalCostValue * 0.05;
+        String certificateNumber = UUID.randomUUID().toString();
+        String promoCode = "AMZN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        model.addAttribute("userName", personDetails.getPerson().getUsername());
+        model.addAttribute("totalCost", totalCost);
+        model.addAttribute("trees", treeDTOS);
+        model.addAttribute("certificateNumber", certificateNumber);
+        model.addAttribute("discount", discount);
+        model.addAttribute("promoCode", promoCode);
+        return "success";
+    }
 
     private Tree convertToEntity(TreeDTO treeDTO, Person person) {
         Tree tree = new Tree();
