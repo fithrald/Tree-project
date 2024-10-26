@@ -30,6 +30,10 @@ public class TreeController {
     @Autowired
     private TreeRepository treeRepository;
 
+    @GetMapping("/main")
+    public String getMain() {
+        return "main";
+    }
     @GetMapping("/getMap")
     public String getMap(@AuthenticationPrincipal PersonDetails personDetails, Model model) {
         List<Tree> trees = treeRepository.findByPersonId(personDetails.getPerson().getId());
