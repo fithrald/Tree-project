@@ -30,10 +30,6 @@ public class TreeController {
     @Autowired
     private TreeRepository treeRepository;
 
-    @GetMapping("/main")
-    public String getMain() {
-        return "main";
-    }
     @GetMapping("/getMap")
     public String getMap(@AuthenticationPrincipal PersonDetails personDetails, Model model) {
         List<Tree> trees = treeRepository.findByPersonId(personDetails.getPerson().getId());
@@ -62,26 +58,7 @@ public class TreeController {
         model.addAttribute("userTrees", treeDTOs);
         return "watchtreeMap";
     }
-    @PostMapping("/payment")
-    public String getPayment(@RequestParam("markersData") String markersData, Model model) {
-        ObjectMapper objectMapper = new ObjectMapper();
-        List<TreeDTO> treeList = Collections.emptyList();
 
-        try {
-            treeList = objectMapper.readValue(markersData, new TypeReference<List<TreeDTO>>() {});
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        }
-        double totalCost = treeList.stream()
-                .mapToDouble(TreeDTO::getPrice)
-                .sum();
-        double discount = totalCost * 0.05;
-        model.addAttribute("markersData", markersData);
-        model.addAttribute("treeList", treeList);
-        model.addAttribute("totalCost", totalCost);
-        model.addAttribute("discount", discount);
-        return "payment";
-    }
     @PostMapping("/save")
     public String payAndSaveMarkers(@AuthenticationPrincipal PersonDetails personDetails,
                                     @RequestParam("totalCost") String totalCost,
@@ -111,6 +88,42 @@ public class TreeController {
         model.addAttribute("promoCode", promoCode);
         return "success";
     }
+
+//        @GetMapping("/success")
+//        public String success(Model model, @AuthenticationPrincipal PersonDetails personDetails) {
+//            model.addAttribute("userName", personDetails.getPerson().getUsername());
+//            String totalCost = (String) model.getAttribute("totalCost"); // Получаем стоимость из модели
+//            model.addAttribute("totalCost", totalCost);
+//            return "success";
+//        }
+
+
+    @GetMapping("/main")
+    public String getMain() {
+        return "main";
+    }
+
+    @PostMapping("/payment")
+    public String getPayment(@RequestParam("markersData") String markersData, Model model) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        List<TreeDTO> treeList = Collections.emptyList();
+
+        try {
+            treeList = objectMapper.readValue(markersData, new TypeReference<List<TreeDTO>>() {});
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+        double totalCost = treeList.stream()
+                .mapToDouble(TreeDTO::getPrice)
+                .sum();
+        double discount = totalCost * 0.05;
+        model.addAttribute("markersData", markersData);
+        model.addAttribute("treeList", treeList);
+        model.addAttribute("totalCost", totalCost);
+        model.addAttribute("discount", discount);
+        return "payment";
+    }
+
 
     private Tree convertToEntity(TreeDTO treeDTO, Person person) {
         Tree tree = new Tree();
