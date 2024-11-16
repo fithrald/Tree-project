@@ -48,6 +48,20 @@ public class TreeController {
         model.addAttribute("userTrees", treeDTOs);
         return "treeMap";
     }
+    @GetMapping("/getWatchMap")
+    public String getWatchMap(@AuthenticationPrincipal PersonDetails personDetails, Model model) {
+        List<Tree> trees = treeRepository.findByPersonId(personDetails.getPerson().getId());
+        List<TreeDTO> treeDTOs = trees.stream()
+                .map(tree -> TreeDTO.builder().lat(Double.parseDouble(tree.getLat()))
+                        .lng( Double.parseDouble(tree.getLng()))
+                        .treeType(tree.getTreeType())
+                        .treeName(tree.getTreeName()).build())
+                .collect(Collectors.toList());
+
+
+        model.addAttribute("userTrees", treeDTOs);
+        return "watchtreeMap";
+    }
     @PostMapping("/payment")
     public String getPayment(@RequestParam("markersData") String markersData, Model model) {
         ObjectMapper objectMapper = new ObjectMapper();
